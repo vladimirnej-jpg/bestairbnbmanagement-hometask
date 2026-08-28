@@ -21,7 +21,6 @@ changed with the deployment decision.
 ```bash
 docker compose up -d postgres
 pnpm db:migrate
-RESET_DEMO_CONFIRM=I_UNDERSTAND pnpm reset:demo
 ```
 
 Run Next.js and Inngest in separate terminals:
