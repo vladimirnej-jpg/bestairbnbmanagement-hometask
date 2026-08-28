@@ -1,0 +1,19 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: bestairbnb
+      POSTGRES_PASSWORD: bestairbnb
+      POSTGRES_USER: bestairbnb
+    ports:
+      - '5432:5432'
+    volumes:
+      - bestairbnb-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U bestairbnb -d bestairbnb']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  bestairbnb-postgres-data:

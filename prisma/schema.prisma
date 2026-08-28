@@ -1,0 +1,305 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum UserRole {
+  OPS
+  MONITOR
+}
+
+enum LifecycleStatus {
+  INCOMING
+  SCHEDULED_INITIAL_APPOINTMENT
+  WARM
+  GONE_COLD
+}
+
+enum QualificationStatus {
+  NEEDS_INFO
+  NEEDS_REVIEW
+  QUALIFIED
+  OUT_OF_ZONE
+}
+
+enum ShowcaseStatus {
+  NOT_READY
+  READY
+  BLOCKED
+  DRAFT_CREATED
+  FAILED
+}
+
+enum ProcessingStatus {
+  PENDING
+  RUNNING
+  SUCCEEDED
+  FAILED
+}
+
+enum SyncStatus {
+  RUNNING
+  SUCCEEDED
+  FAILED
+}
+
+enum ActorType {
+  SYSTEM
+  USER
+}
+
+enum ReviewStatus {
+  PENDING
+  CONFIRMED
+  REJECTED
+}
+
+enum MatchType {
+  EXACT_ADDRESS
+  CONTACT_HISTORY
+  AMBIGUOUS
+}
+
+enum EnrichmentStatus {
+  NOT_ATTEMPTED
+  SUCCEEDED
+  NOT_FOUND
+  FAILED
+}
+
+model User {
+  id           String              @id @default(cuid())
+  email        String              @unique
+  passwordHash String
+  role         UserRole
+  isActive     Boolean             @default(true)
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+  actorEvents  LifecycleEvent[]    @relation("LifecycleEventActor")
+  syncRuns     MasterDataSyncRun[] @relation("SyncRunActor")
+}
+
+model Lead {
+  id                  String              @id @default(cuid())
+  gmailThreadId       String              @unique
+  contactEmail        String?
+  contactName         String?
+  lifecycleStatus     LifecycleStatus     @default(INCOMING)
+  qualificationStatus QualificationStatus @default(NEEDS_INFO)
+  qualificationReason String?
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+  messages            LeadMessage[]
+  property            LeadProperty?
+  showcase            Showcase?
+  processingRuns      ProcessingRun[]
+  lifecycleEvents     LifecycleEvent[]
+
+  @@index([lifecycleStatus, updatedAt])
+  @@index([qualificationStatus, updatedAt])
+}
+
+model LeadMessage {
+  id             String   @id @default(cuid())
+  gmailMessageId String   @unique
+  leadId         String
+  sender         String
+  subject        String
+  body           String
+  receivedAt     DateTime
+  createdAt      DateTime @default(now())
+  lead           Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([leadId, receivedAt])
+}
+
+model LeadProperty {
+  id                    String                   @id @default(cuid())
+  leadId                String                   @unique
+  rawAddress            String
+  country               String?
+  unit                  String?
+  normalizedStreet      String?
+  normalizedHouseNumber String?
+  normalizedCity        String?
+  normalizedPostcode    String?
+  canonicalAddress      String?
+  latitude              Float?
+  longitude             Float?
+  confidence            Float?
+  enrichmentStatus      EnrichmentStatus         @default(NOT_ATTEMPTED)
+  enrichmentSource      String?
+  enrichmentErrorCode   String?
+  enrichedAt            DateTime?
+  masterPropertyId      String?
+  manuallyConfirmedAt   DateTime?
+  lead                  Lead                     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  masterProperty        MasterProperty?          @relation(fields: [masterPropertyId], references: [id], onDelete: SetNull)
+  matchCandidates       PropertyMatchCandidate[]
+
+  @@index([normalizedPostcode, normalizedStreet, normalizedHouseNumber])
+}
+
+model MasterProperty {
+  id                    String                   @id @default(cuid())
+  source                String                   @default("google-sheets")
+  externalId            String
+  addressLine1          String
+  city                  String
+  postcode              String
+  normalizedStreet      String?
+  normalizedHouseNumber String?
+  normalizedCity        String?
+  normalizedPostcode    String?
+  contactEmail          String?
+  sourceUpdatedAt       DateTime?
+  lastSyncedAt          DateTime                 @default(now())
+  isActive              Boolean                  @default(true)
+  isMissing             Boolean                  @default(false)
+  leadProperties        LeadProperty[]
+  matchCandidates       PropertyMatchCandidate[]
+
+  @@unique([source, externalId])
+  @@index([normalizedPostcode, normalizedStreet, normalizedHouseNumber])
+}
+
+model PropertyMatchCandidate {
+  id               String         @id @default(cuid())
+  leadPropertyId   String
+  masterPropertyId String
+  matchType        MatchType
+  confidence       Float
+  reviewStatus     ReviewStatus   @default(PENDING)
+  createdAt        DateTime       @default(now())
+  leadProperty     LeadProperty   @relation(fields: [leadPropertyId], references: [id], onDelete: Cascade)
+  masterProperty   MasterProperty @relation(fields: [masterPropertyId], references: [id], onDelete: Cascade)
+
+  @@index([leadPropertyId, reviewStatus])
+}
+
+model ServiceZone {
+  id               String        @id @default(cuid())
+  source           String        @default("google-sheets")
+  externalId       String
+  name             String
+  city             String?
+  normalizedCity   String?
+  postcodePrefixes String[]
+  isActive         Boolean       @default(true)
+  isMissing        Boolean       @default(false)
+  zoneServices     ZoneService[]
+
+  @@unique([source, externalId])
+  @@index([isActive])
+}
+
+model Service {
+  id           String        @id @default(cuid())
+  source       String        @default("google-sheets")
+  externalId   String
+  name         String
+  description  String?
+  isActive     Boolean       @default(true)
+  isMissing    Boolean       @default(false)
+  zoneServices ZoneService[]
+
+  @@unique([source, externalId])
+  @@index([isActive])
+}
+
+model ZoneService {
+  id            String      @id @default(cuid())
+  serviceZoneId String
+  serviceId     String
+  isActive      Boolean     @default(true)
+  serviceZone   ServiceZone @relation(fields: [serviceZoneId], references: [id], onDelete: Cascade)
+  service       Service     @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  @@unique([serviceZoneId, serviceId])
+  @@index([serviceZoneId, isActive])
+}
+
+model MasterDataSyncRun {
+  id              String     @id @default(cuid())
+  status          SyncStatus
+  trigger         String
+  triggeredBy     String?
+  startedAt       DateTime   @default(now())
+  finishedAt      DateTime?
+  errorCode       String?
+  errorMessage    String?
+  propertyCount   Int        @default(0)
+  zoneCount       Int        @default(0)
+  serviceCount    Int        @default(0)
+  assignmentCount Int        @default(0)
+  actor           User?      @relation("SyncRunActor", fields: [triggeredBy], references: [id], onDelete: SetNull)
+
+  @@index([status, startedAt])
+}
+
+model SyncLease {
+  key        String   @id @map("lease_key")
+  ownerId    String   @map("owner_id")
+  acquiredAt DateTime @default(now()) @map("acquired_at")
+  expiresAt  DateTime @map("expires_at")
+
+  @@index([expiresAt])
+  @@map("sync_leases")
+}
+
+model Showcase {
+  id                String         @id @default(cuid())
+  leadId            String         @unique
+  status            ShowcaseStatus @default(NOT_READY)
+  blockingReason    String?
+  structuredContent Json?
+  renderedHtml      String?
+  gmailDraftId      String?
+  draftSyncIntentKey String?        @unique
+  draftSyncIntentAt  DateTime?
+  manuallyEditedAt  DateTime?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  lead              Lead           @relation(fields: [leadId], references: [id], onDelete: Cascade)
+}
+
+model ProcessingRun {
+  id           String           @id @default(cuid())
+  leadId       String
+  orchestrationRunId String?
+  step         String
+  status       ProcessingStatus @default(PENDING)
+  attempt      Int              @default(0)
+  errorCode    String?
+  errorDetails Json?
+  provider     String?
+  model        String?
+  tokenUsage   Json?
+  startedAt    DateTime?
+  finishedAt   DateTime?
+  createdAt    DateTime         @default(now())
+  lead         Lead             @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([leadId, status, createdAt])
+  @@index([orchestrationRunId])
+}
+
+model LifecycleEvent {
+  id         String           @id @default(cuid())
+  leadId     String
+  fromStatus LifecycleStatus?
+  toStatus   LifecycleStatus
+  actorType  ActorType
+  actorId    String?
+  reason     String?
+  timestamp  DateTime         @default(now())
+  lead       Lead             @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  actor      User?            @relation("LifecycleEventActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([leadId, timestamp])
+}
