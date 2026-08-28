@@ -119,8 +119,8 @@ export class OpenRouterLeadIntelligenceProvider implements LeadIntelligenceProvi
         {
           role: 'system',
           content: repair
-            ? 'Extract the lead again. Return only one valid JSON object with exactly contactEmail, contactName, propertyAddress, confidence. propertyAddress must be an object with exactly country, city, street, houseNumber, unit, postcode. Use null for any missing address component. Do not use markdown or commentary. Use null for missing contact values and a confidence number from 0 to 1.'
-            : 'Extract lead contact and property data. Return only one JSON object with exactly contactEmail, contactName, propertyAddress, confidence. propertyAddress must be an object with exactly country, city, street, houseNumber, unit, postcode. Use null for any missing address component. Use null for missing contact values and a confidence number from 0 to 1.',
+            ? 'Extract the lead again. Return only one valid JSON object with exactly contactEmail, contactName, propertyAddress, confidence. propertyAddress must be an object with exactly country, city, street, houseNumber, unit, postcode. Keep the house number and unit separate from the street. Do not infer missing values from postcode or context. Use null for any missing address component. Do not use markdown or commentary. Use null for missing contact values and a confidence number from 0 to 1.'
+            : 'Extract lead contact and property data. Return only one JSON object with exactly contactEmail, contactName, propertyAddress, confidence. propertyAddress must be an object with exactly country, city, street, houseNumber, unit, postcode. Keep the house number and unit separate from the street. Do not infer missing values from postcode or context. Use null for any missing address component. Use null for missing contact values and a confidence number from 0 to 1.',
         },
         { role: 'user', content: input.conversation.slice(0, 20_000) },
       ];

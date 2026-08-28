@@ -124,19 +124,24 @@ safer.
 ## Local setup
 
 ```bash
-cd bestairbnb-take-home
 pnpm install
 cp .env.example .env
-docker compose up -d postgres
+
+# Use the included PostgreSQL container (or start PostgreSQL 16 yourself).
+docker compose up -d --wait postgres
 pnpm db:migrate
-RESET_DEMO_CONFIRM=I_UNDERSTAND pnpm reset:demo
 ```
 
-Run the two local processes in separate terminals:
+The default `PROVIDER_MODE=fake` works without Google or LLM credentials. Keep
+the generated `.env` for local testing; configure live credentials only for a
+dedicated demo account.
+
+Run the application and the local Inngest server in separate terminals. Both
+commands must be run from `bestairbnb-take-home`:
 
 ```bash
 pnpm dev
-INNGEST_DEV=1 pnpm inngest:dev
+pnpm inngest:dev
 ```
 
 Open <http://localhost:3000/login>.
@@ -249,16 +254,3 @@ retention, and LLM model choice. Costs can be controlled with message-length
 limits, one extraction per changed conversation, retries only for transient
 errors, caching stable geocoding results, and retention policies for raw email
 bodies and processing logs.
-
-## Live demo checklist
-
-1. Use a dedicated Gmail mailbox and a non-production Sheet/Calendar.
-2. Run the local setup and start Next.js plus Inngest.
-3. Sync master data, then Gmail.
-4. Show an incomplete lead becoming qualified after a follow-up email.
-5. Review the property context, edit the showcase, and save it to Gmail.
-6. Move the lead through its lifecycle.
-7. Sign in as MONITOR and show the read-only monitoring view.
-
-For deployment details, see [docs/deployment.md](docs/deployment.md). For the
-full architecture notes, see [docs/architecture.md](docs/architecture.md).
