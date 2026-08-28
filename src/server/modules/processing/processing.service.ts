@@ -1,3 +1,5 @@
+import type { QualificationStatus } from '@prisma/client';
+
 import { ApplicationError } from '../../errors/application-error';
 import {
   LeadIntelligenceProviderError,
@@ -16,7 +18,7 @@ export interface ProcessingContext {
 export interface LeadProcessingSteps {
   extract(leadId: string, context: ProcessingContext): Promise<void>;
   resolveProperty(leadId: string, context: ProcessingContext): Promise<void>;
-  qualify(leadId: string, context: ProcessingContext): Promise<void>;
+  qualify(leadId: string, context: ProcessingContext): Promise<QualificationStatus>;
 }
 
 export class ProcessingService implements LeadProcessingSteps {
@@ -75,7 +77,7 @@ export class ProcessingService implements LeadProcessingSteps {
     }
   }
 
-  public async qualify(leadId: string, context: ProcessingContext): Promise<void> {
+  public async qualify(leadId: string, context: ProcessingContext): Promise<QualificationStatus> {
     const lead = await this.requireLead(leadId);
     const run = await this.processingRepository.createRunning(leadId, 'qualification', context);
     try {
@@ -102,6 +104,7 @@ export class ProcessingService implements LeadProcessingSteps {
         decision.status === 'OUT_OF_ZONE' ? 'GONE_COLD' : current.lifecycleStatus,
       );
       await this.processingRepository.succeed(run.id, { provider: 'rules' });
+      return decision.status;
     } catch (error) {
       await this.processingRepository.fail(run.id, this.errorCode(error), {
         message: this.errorMessage(error),

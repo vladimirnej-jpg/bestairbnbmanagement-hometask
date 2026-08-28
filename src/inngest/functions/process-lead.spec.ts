@@ -20,6 +20,7 @@ describe('processLead', () => {
     });
     const qualify = vi.fn(async () => {
       calls.push('qualification');
+      return 'NEEDS_INFO' as const;
     });
     setContainerForTests({
       processingService: { extract, resolveProperty, qualify } as never,
@@ -40,6 +41,37 @@ describe('processLead', () => {
     expect(resolveProperty).toHaveBeenCalledWith('lead-1', expect.any(Object));
     expect(qualify).toHaveBeenCalledWith('lead-1', expect.any(Object));
     expect(processLead.opts).toMatchObject({ retries: 2, concurrency: { limit: 1 } });
+  });
+
+  it('generates a showcase after a lead becomes qualified', async () => {
+    const calls: string[] = [];
+    const extract = vi.fn(async () => {
+      calls.push('extract');
+    });
+    const resolveProperty = vi.fn(async () => {
+      calls.push('property');
+    });
+    const qualify = vi.fn(async () => {
+      calls.push('qualification');
+      return 'QUALIFIED' as const;
+    });
+    const generate = vi.fn(async () => {
+      calls.push('showcase');
+    });
+    setContainerForTests({
+      processingService: { extract, resolveProperty, qualify } as never,
+      showcasesService: { generate } as never,
+    } as unknown as AppContainer);
+    const engine = new InngestTestEngine({
+      function: processLead,
+      events: [leadProcessingRequested.create({ leadId: 'lead-1', reason: 'ingestion' })],
+    });
+
+    const execution = await engine.execute();
+
+    expect(execution.error).toBeUndefined();
+    expect(calls).toEqual(['extract', 'property', 'qualification', 'showcase']);
+    expect(generate).toHaveBeenCalledWith('lead-1');
   });
 
   it('stops at the failing durable step so later steps are not run', async () => {
