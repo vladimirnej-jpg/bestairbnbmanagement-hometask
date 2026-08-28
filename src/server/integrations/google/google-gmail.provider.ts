@@ -36,12 +36,15 @@ export class GoogleGmailProvider implements GmailProvider {
 
     try {
       const messages: GmailMessage[] = [];
+      const leadQuery = [config.GOOGLE_GMAIL_QUERY?.trim(), '-from:me']
+        .filter((part): part is string => part !== undefined && part.length > 0)
+        .join(' ');
       let pageToken: string | undefined;
       do {
         const listResponse = await this.withTimeout(
           gmail.users.messages.list({
             userId: config.GOOGLE_GMAIL_USER_ID,
-            q: config.GOOGLE_GMAIL_QUERY,
+            q: leadQuery,
             maxResults: config.GOOGLE_GMAIL_MAX_RESULTS,
             ...(pageToken === undefined ? {} : { pageToken }),
           }),

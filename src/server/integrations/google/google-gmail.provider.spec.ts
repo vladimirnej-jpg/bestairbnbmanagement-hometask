@@ -61,16 +61,33 @@ describe('GoogleGmailProvider.importMessage', () => {
     await expect(new GoogleGmailProvider(config()).listLeadMessages()).resolves.toHaveLength(2);
     expect(listMessagesMock).toHaveBeenNthCalledWith(1, {
       userId: 'qa@example.test',
-      q: undefined,
+      q: '-from:me',
       maxResults: 50,
     });
     expect(listMessagesMock).toHaveBeenNthCalledWith(2, {
       userId: 'qa@example.test',
-      q: undefined,
+      q: '-from:me',
       maxResults: 50,
       pageToken: 'page-2',
     });
     expect(getMessageMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps a custom Gmail query while excluding messages sent by the mailbox', async () => {
+    listMessagesMock.mockResolvedValueOnce({ data: { messages: [] } });
+
+    await expect(
+      new GoogleGmailProvider({
+        ...config(),
+        GOOGLE_GMAIL_QUERY: 'label:inbox newer_than:30d',
+      }).listLeadMessages(),
+    ).resolves.toEqual([]);
+
+    expect(listMessagesMock).toHaveBeenCalledWith({
+      userId: 'qa@example.test',
+      q: 'label:inbox newer_than:30d -from:me',
+      maxResults: 50,
+    });
   });
 
   it('returns the authenticated mailbox address for confirmation', async () => {
