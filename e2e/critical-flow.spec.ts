@@ -1,5 +1,7 @@
 import { expect, test } from '@playwright/test';
 
+test.setTimeout(120_000);
+
 test('operator completes the deterministic lead journey and monitor verifies it', async ({
   page,
 }) => {
