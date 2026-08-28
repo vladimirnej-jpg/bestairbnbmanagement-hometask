@@ -81,6 +81,7 @@ export function MonitoringOverview({
               }
               healthy={overview.sync.hasSuccessfulProjection}
             />
+            {/* TODO: derive Gmail health from provider status instead of hardcoding true. */}
             <HealthRow
               label="Gmail ingestion"
               detail={`${overview.sync.gmail.messageCount} messages · ${formatDate(overview.sync.gmail.lastMessageAt)}`}

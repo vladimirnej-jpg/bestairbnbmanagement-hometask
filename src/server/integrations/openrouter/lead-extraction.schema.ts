@@ -15,7 +15,7 @@ export const propertyAddressSchema = z
 
 export const leadExtractionSchema = z.object({
   contactEmail: z.string().email().nullable().optional(),
-  contactName: z.string().trim().min(1).nullable().optional(),
+  contactName: z.string().trim().min(1).max(120).nullable().optional(),
   propertyAddress: propertyAddressSchema,
   confidence: z.number().min(0).max(1).default(0),
 });

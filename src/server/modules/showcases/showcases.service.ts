@@ -12,6 +12,8 @@ import type { ShowcaseRendererService } from './showcase-renderer.service';
 import type { ShowcasesRepository } from './showcases.repository';
 
 const STALE_PROJECTION_MS = 24 * 60 * 60 * 1_000;
+const SHOWCASE_SUBJECT_PREFIX = 'Your service showcase for ';
+const SHOWCASE_SUBJECT_MAX_LENGTH = 160;
 type ShowcaseLead = NonNullable<Awaited<ReturnType<ShowcasesRepository['findLead']>>>;
 
 export class ShowcasesService {
@@ -155,7 +157,7 @@ export class ShowcasesService {
   ): ShowcaseContentInput {
     const address = lead.property?.canonicalAddress ?? lead.property?.rawAddress ?? 'your property';
     return {
-      subject: `Your service showcase for ${address}`,
+      subject: createShowcaseSubject(address),
       greeting: `Hello ${lead.contactName ?? 'there'},`,
       propertySummary: `We prepared this showcase for ${address}.`,
       selectedServices: [...services],
@@ -169,4 +171,10 @@ export class ShowcasesService {
       ...(warning === null ? {} : { masterDataWarning: warning }),
     };
   }
+}
+
+function createShowcaseSubject(address: string): string {
+  const subject = `${SHOWCASE_SUBJECT_PREFIX}${address}`;
+  if (subject.length <= SHOWCASE_SUBJECT_MAX_LENGTH) return subject;
+  return `${subject.slice(0, SHOWCASE_SUBJECT_MAX_LENGTH - 3).trimEnd()}...`;
 }

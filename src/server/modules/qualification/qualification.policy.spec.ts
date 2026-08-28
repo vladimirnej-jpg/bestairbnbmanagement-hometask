@@ -10,7 +10,6 @@ describe('QualificationPolicy', () => {
     normalizedPostcode: '1012AB',
     normalizedStreet: 'example street',
     normalizedHouseNumber: '10',
-    matchStatus: 'exact' as const,
     zone: 'inside' as const,
   };
 
@@ -18,9 +17,6 @@ describe('QualificationPolicy', () => {
     ['missing contact', { ...complete, contactEmail: null }, 'NEEDS_INFO'],
     ['missing address', { ...complete, rawAddress: null }, 'NEEDS_INFO'],
     ['incomplete address', { ...complete, normalizedHouseNumber: null }, 'NEEDS_INFO'],
-    ['ambiguous property', { ...complete, matchStatus: 'ambiguous' as const }, 'NEEDS_REVIEW'],
-    ['contact-history match', { ...complete, matchStatus: 'review' as const }, 'NEEDS_REVIEW'],
-    ['unmatched property', { ...complete, matchStatus: 'none' as const }, 'NEEDS_REVIEW'],
     ['unknown zone', { ...complete, zone: 'unknown' as const }, 'NEEDS_REVIEW'],
     ['outside zone', { ...complete, zone: 'outside' as const }, 'OUT_OF_ZONE'],
     ['qualified', complete, 'QUALIFIED'],
@@ -28,7 +24,7 @@ describe('QualificationPolicy', () => {
     expect(policy.decide(input).status).toBe(status);
   });
 
-  it('does not depend on service readiness', () => {
+  it('qualifies a complete address inside a supported zone without master matching', () => {
     expect(policy.decide(complete)).toMatchObject({ status: 'QUALIFIED' });
   });
 });

@@ -16,8 +16,10 @@ const commonRuntimeConfig = z.object({
   GOOGLE_GMAIL_MAX_RESULTS: z.coerce.number().int().min(1).max(100).default(50),
   GOOGLE_CALENDAR_ID: nonEmptyString.default('primary'),
   GOOGLE_CALENDAR_MAX_RESULTS: z.coerce.number().int().min(1).max(100).default(25),
+  LEAD_INTELLIGENCE_PROVIDER: z.enum(['openrouter', 'groq']).optional(),
   OPENROUTER_MODEL: nonEmptyString.default('google/gemini-2.0-flash-exp:free'),
   OPENROUTER_FALLBACK_MODELS: z.string().optional(),
+  GROQ_MODEL: nonEmptyString.optional(),
   NOMINATIM_BASE_URL: z.string().url().default('https://nominatim.openstreetmap.org'),
 });
 
@@ -29,6 +31,7 @@ const fakeRuntimeConfig = commonRuntimeConfig.extend({
   GOOGLE_GMAIL_CLIENT_SECRET: nonEmptyString.optional(),
   GOOGLE_GMAIL_REFRESH_TOKEN: nonEmptyString.optional(),
   OPENROUTER_API_KEY: nonEmptyString.optional(),
+  GROQ_API_KEY: nonEmptyString.optional(),
 });
 
 const liveRuntimeConfig = commonRuntimeConfig.extend({
@@ -38,7 +41,8 @@ const liveRuntimeConfig = commonRuntimeConfig.extend({
   GOOGLE_GMAIL_CLIENT_ID: nonEmptyString,
   GOOGLE_GMAIL_CLIENT_SECRET: nonEmptyString,
   GOOGLE_GMAIL_REFRESH_TOKEN: nonEmptyString,
-  OPENROUTER_API_KEY: nonEmptyString,
+  OPENROUTER_API_KEY: nonEmptyString.optional(),
+  GROQ_API_KEY: nonEmptyString.optional(),
 });
 
 const runtimeConfigSchema = z.discriminatedUnion('PROVIDER_MODE', [
@@ -49,10 +53,28 @@ const runtimeConfigSchema = z.discriminatedUnion('PROVIDER_MODE', [
 export type AppConfig = z.infer<typeof runtimeConfigSchema>;
 
 export function validateConfig(config: Record<string, unknown>): AppConfig {
-  return runtimeConfigSchema.parse({
+  const parsed = runtimeConfigSchema.parse({
     ...config,
     PROVIDER_MODE: config.PROVIDER_MODE ?? 'fake',
   });
+  if (parsed.PROVIDER_MODE === 'live') {
+    const requiredKey =
+      parsed.LEAD_INTELLIGENCE_PROVIDER === 'groq'
+        ? parsed.GROQ_API_KEY
+        : parsed.OPENROUTER_API_KEY;
+    if (requiredKey === undefined) {
+      throw new z.ZodError([
+        {
+          code: z.ZodIssueCode.custom,
+          path: [
+            parsed.LEAD_INTELLIGENCE_PROVIDER === 'groq' ? 'GROQ_API_KEY' : 'OPENROUTER_API_KEY',
+          ],
+          message: `A key is required for ${parsed.LEAD_INTELLIGENCE_PROVIDER}`,
+        },
+      ]);
+    }
+  }
+  return parsed;
 }
 
 let cachedConfig: AppConfig | undefined;

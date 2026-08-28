@@ -6,7 +6,6 @@ export interface QualificationInput {
   readonly normalizedPostcode: string | null;
   readonly normalizedStreet: string | null;
   readonly normalizedHouseNumber: string | null;
-  readonly matchStatus: 'missing' | 'exact' | 'ambiguous' | 'review' | 'none';
   readonly zone: 'inside' | 'outside' | 'unknown';
 }
 
@@ -32,12 +31,6 @@ export class QualificationPolicy {
     }
     if (input.zone === 'outside') {
       return { status: 'OUT_OF_ZONE', reason: 'Property is outside the known service zones' };
-    }
-    if (input.matchStatus === 'ambiguous' || input.matchStatus === 'review') {
-      return { status: 'NEEDS_REVIEW', reason: 'Multiple master properties match the address' };
-    }
-    if (input.matchStatus === 'none') {
-      return { status: 'NEEDS_REVIEW', reason: 'Property is not matched to master data' };
     }
     if (input.zone === 'unknown') {
       return { status: 'NEEDS_REVIEW', reason: 'Property service zone could not be determined' };

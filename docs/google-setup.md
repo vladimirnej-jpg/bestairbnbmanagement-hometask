@@ -28,13 +28,24 @@ configurable. Gmail draft writes are only exercised by the explicit live smoke
 flag.
 
 Minimum scopes are read access for inbox/calendar and draft access for the
-optional draft check. Keep the refresh token out of shell history and logs.
+optional draft check. The `gmail:inject` CLI additionally requires
+`https://www.googleapis.com/auth/gmail.insert` or
+`https://www.googleapis.com/auth/gmail.modify`. Keep the refresh token out of
+shell history and logs.
 
-## OpenRouter and geocoder
+The CLI imports RFC822 messages into the dedicated QA mailbox with
+`users.messages.import`; it does not send them to external recipients. Use
+only a non-production mailbox because the imported messages remain real Gmail
+data until they are removed.
 
-Set `OPENROUTER_API_KEY`, `OPENROUTER_MODEL`, and optional fallback models for
-structured extraction. The Nominatim adapter uses `NOMINATIM_BASE_URL` and a
-bounded timeout; comply with the selected provider's usage policy.
+## LLM provider and geocoder
+
+For OpenRouter, set `LEAD_INTELLIGENCE_PROVIDER=openrouter`,
+`OPENROUTER_API_KEY`, `OPENROUTER_MODEL`, and optional fallback models. For
+Groq, set `LEAD_INTELLIGENCE_PROVIDER=groq`, `GROQ_API_KEY`, and
+`GROQ_MODEL` (for example `openai/gpt-oss-20b`). The Nominatim adapter uses
+`NOMINATIM_BASE_URL` and a bounded timeout; comply with the selected provider's
+usage policy.
 
 If a provider is unavailable, the corresponding Inngest step reports a
 provider warning and can be retried by the durable function. Tests use explicit

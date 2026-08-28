@@ -78,7 +78,7 @@ async function main(): Promise<void> {
     );
     return result === null ? 'no result' : 'bounded address lookup succeeded';
   });
-  await run(results, 'OpenRouter structured output', async () => {
+  await run(results, 'Lead intelligence structured output', async () => {
     const result = await openRouter.extractLead({
       conversation: 'Name: Smoke Check\nAddress: 10 Example Street, Amsterdam, 1012 AB',
     });
@@ -106,13 +106,15 @@ async function run(
 }
 
 function requiredLiveVariables(): readonly string[] {
+  const leadProvider = process.env.LEAD_INTELLIGENCE_PROVIDER?.trim() ?? 'openrouter';
+  const leadApiKey = leadProvider === 'groq' ? 'GROQ_API_KEY' : 'OPENROUTER_API_KEY';
   return [
     'GOOGLE_SHEETS_SPREADSHEET_ID',
     'GOOGLE_SHEETS_SERVICE_ACCOUNT_JSON_BASE64',
     'GOOGLE_GMAIL_CLIENT_ID',
     'GOOGLE_GMAIL_CLIENT_SECRET',
     'GOOGLE_GMAIL_REFRESH_TOKEN',
-    'OPENROUTER_API_KEY',
+    leadApiKey,
   ];
 }
 

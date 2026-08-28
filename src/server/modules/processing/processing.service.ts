@@ -48,6 +48,7 @@ export class ProcessingService implements LeadProcessingSteps {
       await this.processingRepository.succeed(run.id, {
         provider: extractionResult.provider,
         model: extractionResult.model,
+        promptVersion: extractionResult.promptVersion,
         tokenUsage: extractionResult.tokenUsage,
       });
     } catch (error) {
@@ -94,7 +95,6 @@ export class ProcessingService implements LeadProcessingSteps {
         normalizedPostcode: current.property?.normalizedPostcode ?? null,
         normalizedStreet: current.property?.normalizedStreet ?? null,
         normalizedHouseNumber: current.property?.normalizedHouseNumber ?? null,
-        matchStatus: resolution.match.status,
         zone: resolution.zone,
       });
       await this.leadsRepository.updateQualification(

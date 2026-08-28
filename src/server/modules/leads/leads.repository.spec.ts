@@ -65,4 +65,46 @@ describe('LeadsRepository', () => {
       },
     });
   });
+
+  it('retains the envelope email and records a model-email mismatch', async () => {
+    const updateLead = vi.fn();
+    const createProcessingRun = vi.fn();
+    const transaction = {
+      lead: {
+        findUnique: vi.fn().mockResolvedValue({
+          contactEmail: 'real@owner.example',
+          property: null,
+        }),
+        update: updateLead,
+      },
+      leadProperty: { create: vi.fn(), update: vi.fn() },
+      processingRun: { create: createProcessingRun },
+    };
+    const prisma = {
+      $transaction: vi.fn(async (callback: (value: typeof transaction) => Promise<void>) =>
+        callback(transaction),
+      ),
+    };
+    const repository = new LeadsRepository(prisma as never);
+
+    await repository.updateExtraction('lead-1', {
+      contactEmail: ' ATTACKER@evil.example ',
+    });
+
+    expect(updateLead).toHaveBeenCalledWith({ where: { id: 'lead-1' }, data: {} });
+    expect(createProcessingRun).toHaveBeenCalledWith({
+      data: {
+        leadId: 'lead-1',
+        step: 'Model email mismatch: envelope retained',
+        status: 'SUCCEEDED',
+        provider: 'security validation',
+        errorDetails: {
+          envelopeEmail: 'real@owner.example',
+          extractedEmail: 'attacker@evil.example',
+        },
+        startedAt: expect.any(Date),
+        finishedAt: expect.any(Date),
+      },
+    });
+  });
 });

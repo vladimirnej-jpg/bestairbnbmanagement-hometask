@@ -61,7 +61,11 @@ const nestedWrapperKeys = [
  * formatting. Models may return fenced JSON, prose around JSON, content-part
  * arrays, aliases for fields, or tool-call arguments.
  */
-export function parseOpenRouterResponse(response: unknown, model: string): LeadIntelligenceResult {
+export function parseOpenRouterResponse(
+  response: unknown,
+  model: string,
+  provider = 'openrouter',
+): LeadIntelligenceResult {
   const responseRecord = asRecord(response);
   if (responseRecord === null) {
     throw invalidResponse('OpenRouter returned a non-object response');
@@ -70,6 +74,13 @@ export function parseOpenRouterResponse(response: unknown, model: string): LeadI
   const providerError = readProviderError(responseRecord.error);
   if (providerError !== null) {
     throw new LeadIntelligenceProviderError(providerError.code, providerError.message);
+  }
+
+  const firstChoice = Array.isArray(responseRecord.choices)
+    ? asRecord(responseRecord.choices[0])
+    : null;
+  if (firstChoice?.finish_reason === 'length') {
+    throw invalidResponse('OpenRouter response was truncated by the token limit');
   }
 
   const content = extractOpenRouterMessageText(responseRecord);
@@ -84,7 +95,7 @@ export function parseOpenRouterResponse(response: unknown, model: string): LeadI
 
   return {
     extraction,
-    provider: 'openrouter',
+    provider,
     model,
     ...(inputTokens === undefined && outputTokens === undefined
       ? {}
@@ -161,6 +172,11 @@ function normalizeExtraction(value: unknown): UnknownRecord | null {
     ].some((key) => hasKey(source, key)),
   );
   if (!hasKnownField) return null;
+
+  const hasTopLevelSignal = sources.some((source) =>
+    [...emailKeys, ...nameKeys, ...confidenceKeys].some((key) => hasKey(source, key)),
+  );
+  if (!hasTopLevelSignal) return null;
 
   const address = firstPropertyAddress(sources);
 

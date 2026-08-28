@@ -1,0 +1,25 @@
+From: Riley Example <riley@example.test>
+To: leads@BestAirbnbManagement.com
+Subject: New property onboarding request
+Date: Fri, 28 Aug 2026 08:40:00 +0000
+Message-ID: <scenario-multipart-qualified-001@example.test>
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="scenario-boundary"
+
+--scenario-boundary
+Content-Type: text/plain; charset=UTF-8
+
+Hello,
+
+Please help us arrange turnover cleaning for our property at
+42 Garden Road, Amsterdam, 1054 XY. We expect two to four guest stays per
+month and would like to discuss a recurring service.
+
+--scenario-boundary
+Content-Type: text/html; charset=UTF-8
+
+<p>Hello,</p>
+<p>Please help us arrange turnover cleaning for our property at
+42 Garden Road, Amsterdam, 1054 XY.</p>
+
+--scenario-boundary--

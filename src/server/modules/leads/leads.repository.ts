@@ -285,13 +285,39 @@ export class LeadsRepository {
       if (lead === null) {
         return;
       }
+      const extractedEmail = update.contactEmail;
+      const envelopeEmail = lead.contactEmail;
       await transaction.lead.update({
         where: { id: leadId },
         data: {
-          ...(update.contactEmail === undefined ? {} : { contactEmail: update.contactEmail }),
+          ...(envelopeEmail === null && extractedEmail !== undefined
+            ? { contactEmail: extractedEmail }
+            : {}),
           ...(update.contactName === undefined ? {} : { contactName: update.contactName }),
         },
       });
+      if (
+        envelopeEmail !== null &&
+        extractedEmail !== null &&
+        extractedEmail !== undefined &&
+        this.hasEmailMismatch(envelopeEmail, extractedEmail)
+      ) {
+        const timestamp = new Date();
+        await transaction.processingRun.create({
+          data: {
+            leadId,
+            step: 'Model email mismatch: envelope retained',
+            status: 'SUCCEEDED',
+            provider: 'security validation',
+            errorDetails: {
+              envelopeEmail: this.normalizeEmail(envelopeEmail),
+              extractedEmail: this.normalizeEmail(extractedEmail),
+            },
+            startedAt: timestamp,
+            finishedAt: timestamp,
+          },
+        });
+      }
       if (
         update.propertyAddress === undefined ||
         update.propertyAddress === null ||
@@ -413,5 +439,21 @@ export class LeadsRepository {
   private extractEmail(value: string): string | null {
     const match = value.match(/[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}/);
     return match?.[0]?.toLowerCase() ?? null;
+  }
+
+  private hasEmailMismatch(
+    envelopeEmail: string | null,
+    extractedEmail: string | null | undefined,
+  ): boolean {
+    return (
+      envelopeEmail !== null &&
+      extractedEmail !== null &&
+      extractedEmail !== undefined &&
+      this.normalizeEmail(envelopeEmail) !== this.normalizeEmail(extractedEmail)
+    );
+  }
+
+  private normalizeEmail(value: string): string {
+    return value.trim().toLowerCase();
   }
 }

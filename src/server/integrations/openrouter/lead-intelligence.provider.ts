@@ -11,6 +11,7 @@ export interface LeadIntelligenceResult {
   readonly extraction: LeadExtraction;
   readonly provider: string;
   readonly model?: string;
+  readonly promptVersion?: string;
   readonly tokenUsage?: { readonly input?: number; readonly output?: number };
 }
 

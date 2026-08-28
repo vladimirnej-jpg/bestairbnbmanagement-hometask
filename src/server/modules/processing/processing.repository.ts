@@ -30,6 +30,7 @@ export class ProcessingRepository {
     metadata?: {
       readonly provider?: string;
       readonly model?: string;
+      readonly promptVersion?: string;
       readonly tokenUsage?: object;
     },
   ): Promise<ProcessingRun> {
@@ -40,7 +41,16 @@ export class ProcessingRepository {
         finishedAt: new Date(),
         ...(metadata?.provider === undefined ? {} : { provider: metadata.provider }),
         ...(metadata?.model === undefined ? {} : { model: metadata.model }),
-        ...(metadata?.tokenUsage === undefined ? {} : { tokenUsage: metadata.tokenUsage }),
+        ...(metadata?.tokenUsage === undefined && metadata?.promptVersion === undefined
+          ? {}
+          : {
+              tokenUsage: {
+                ...(metadata?.tokenUsage ?? {}),
+                ...(metadata?.promptVersion === undefined
+                  ? {}
+                  : { promptVersion: metadata.promptVersion }),
+              },
+            }),
       },
     });
   }

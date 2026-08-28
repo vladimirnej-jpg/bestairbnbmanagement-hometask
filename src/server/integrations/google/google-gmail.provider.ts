@@ -7,8 +7,10 @@ import {
   type GmailDraftInput,
   type GmailDraftResult,
   type GmailMessage,
+  type GmailMessageImportResult,
   type GmailProvider,
 } from './gmail.provider';
+import { encodeRfc822Message } from './gmail-import';
 
 const REQUEST_TIMEOUT_MS = 30_000;
 
@@ -33,22 +35,32 @@ export class GoogleGmailProvider implements GmailProvider {
     }
 
     try {
-      const listResponse = await this.withTimeout(
-        gmail.users.messages.list({
-          userId: config.GOOGLE_GMAIL_USER_ID,
-          q: config.GOOGLE_GMAIL_QUERY,
-          maxResults: config.GOOGLE_GMAIL_MAX_RESULTS,
-        }),
-      );
-      const messageRefs = listResponse.data.messages ?? [];
-      const messages = await Promise.all(
-        messageRefs
-          .filter(
-            (reference): reference is { id: string; threadId?: string | null } =>
-              typeof reference.id === 'string',
-          )
-          .map((reference) => this.fetchMessage(gmail, reference.id)),
-      );
+      const messages: GmailMessage[] = [];
+      let pageToken: string | undefined;
+      do {
+        const listResponse = await this.withTimeout(
+          gmail.users.messages.list({
+            userId: config.GOOGLE_GMAIL_USER_ID,
+            q: config.GOOGLE_GMAIL_QUERY,
+            maxResults: config.GOOGLE_GMAIL_MAX_RESULTS,
+            ...(pageToken === undefined ? {} : { pageToken }),
+          }),
+        );
+        const messageRefs = listResponse.data.messages ?? [];
+        const pageMessages = await Promise.all(
+          messageRefs
+            .filter(
+              (reference): reference is { id: string; threadId?: string | null } =>
+                typeof reference.id === 'string',
+            )
+            .map((reference) => this.fetchMessage(gmail, reference.id)),
+        );
+        messages.push(...pageMessages);
+        pageToken =
+          typeof listResponse.data.nextPageToken === 'string'
+            ? listResponse.data.nextPageToken
+            : undefined;
+      } while (pageToken !== undefined);
       return messages;
     } catch (error) {
       if (error instanceof GmailProviderError) {
@@ -66,6 +78,93 @@ export class GoogleGmailProvider implements GmailProvider {
 
   public async updateDraft(draftId: string, input: GmailDraftInput): Promise<GmailDraftResult> {
     return this.writeDraft(input, draftId);
+  }
+
+  public async getMailboxEmail(): Promise<string> {
+    let gmail: gmail_v1.Gmail;
+    try {
+      gmail = this.gmailClient();
+    } catch (error) {
+      if (error instanceof GoogleClientConfigurationError) {
+        throw new GmailProviderError('PROVIDER_CONFIGURATION', error.message, { cause: error });
+      }
+      throw error;
+    }
+
+    try {
+      const response = await this.withTimeout(
+        gmail.users.getProfile({ userId: this.config.GOOGLE_GMAIL_USER_ID }),
+      );
+      const emailAddress = response.data.emailAddress;
+      if (typeof emailAddress !== 'string' || emailAddress.trim().length === 0) {
+        throw new GmailProviderError(
+          'PROVIDER_INVALID_RESPONSE',
+          'Gmail profile response is missing the mailbox email address',
+        );
+      }
+      return emailAddress.trim().toLowerCase();
+    } catch (error) {
+      if (error instanceof GmailProviderError) throw error;
+      throw new GmailProviderError('PROVIDER_UNAVAILABLE', 'Gmail profile lookup failed', {
+        cause: error,
+      });
+    }
+  }
+
+  public async importMessage(rawMessage: string): Promise<GmailMessageImportResult> {
+    const encodedMessage = encodeRfc822Message(rawMessage);
+    let gmail: gmail_v1.Gmail;
+    try {
+      gmail = this.gmailClient();
+    } catch (error) {
+      if (error instanceof GoogleClientConfigurationError) {
+        throw new GmailProviderError('PROVIDER_CONFIGURATION', error.message, { cause: error });
+      }
+      throw error;
+    }
+
+    try {
+      const response = await this.withTimeout(
+        gmail.users.messages.import({
+          userId: this.config.GOOGLE_GMAIL_USER_ID,
+          internalDateSource: 'dateHeader',
+          processForCalendar: false,
+          requestBody: { raw: encodedMessage },
+        }),
+      );
+      const messageId = response.data.id;
+      if (typeof messageId !== 'string' || messageId.length === 0) {
+        throw new GmailProviderError(
+          'PROVIDER_INVALID_RESPONSE',
+          `Gmail import response is missing a message id (received fields: ${responseFields(response.data)})`,
+        );
+      }
+      let threadId = response.data.threadId;
+      if (typeof threadId !== 'string' || threadId.length === 0) {
+        const fetchedMessage = await this.withTimeout(
+          gmail.users.messages.get({
+            userId: this.config.GOOGLE_GMAIL_USER_ID,
+            id: messageId,
+            format: 'minimal',
+          }),
+        );
+        threadId = fetchedMessage.data.threadId;
+      }
+      if (typeof threadId !== 'string' || threadId.length === 0) {
+        throw new GmailProviderError(
+          'PROVIDER_INVALID_RESPONSE',
+          `Gmail import response is missing a thread id (received fields: ${responseFields(response.data)})`,
+        );
+      }
+      return { messageId, threadId };
+    } catch (error) {
+      if (error instanceof GmailProviderError) throw error;
+      throw new GmailProviderError(
+        'PROVIDER_UNAVAILABLE',
+        `Gmail message import failed: ${describeGmailApiError(error)}`,
+        { cause: error },
+      );
+    }
   }
 
   private async writeDraft(input: GmailDraftInput, draftId?: string): Promise<GmailDraftResult> {
@@ -236,4 +335,40 @@ export class GoogleGmailProvider implements GmailProvider {
       }
     }
   }
+}
+
+function describeGmailApiError(error: unknown): string {
+  const response = isRecord(error) ? toRecord(error.response) : undefined;
+  const responseData = response === undefined ? undefined : toRecord(response.data);
+  const apiError = responseData === undefined ? undefined : toRecord(responseData.error);
+  const apiErrors = apiError?.errors;
+  const firstReason =
+    Array.isArray(apiErrors) && apiErrors.length > 0 && isRecord(apiErrors[0])
+      ? apiErrors[0].reason
+      : undefined;
+  const status = typeof response?.status === 'number' ? `HTTP ${response.status}` : undefined;
+  const reason = typeof firstReason === 'string' ? firstReason : undefined;
+  const message = typeof apiError?.message === 'string' ? apiError.message : undefined;
+  const fallback = error instanceof Error ? error.message : undefined;
+  const prefix = [status, reason].filter(isNonEmptyString).join(' ');
+  if (message !== undefined) return prefix.length > 0 ? `${prefix}: ${message}` : message;
+  return [prefix, fallback ?? 'unknown error'].filter(isNonEmptyString).join(' ');
+}
+
+function responseFields(value: unknown): string {
+  if (!isRecord(value)) return 'none';
+  const fields = Object.keys(value).sort();
+  return fields.length === 0 ? 'none' : fields.join(', ');
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function toRecord(value: unknown): Record<string, unknown> | undefined {
+  return isRecord(value) ? value : undefined;
+}
+
+function isNonEmptyString(value: string | undefined): value is string {
+  return value !== undefined && value.length > 0;
 }

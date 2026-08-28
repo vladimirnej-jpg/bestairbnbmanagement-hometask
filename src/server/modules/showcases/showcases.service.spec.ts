@@ -31,6 +31,43 @@ describe('ShowcasesService', () => {
     });
   });
 
+  it('keeps generated subjects within the Gmail length limit for long addresses', async () => {
+    const address = 'A'.repeat(200);
+    const upsertContent = vi.fn().mockResolvedValue({});
+    const repository = {
+      findLead: vi.fn().mockResolvedValue({
+        qualificationStatus: 'QUALIFIED',
+        contactName: 'Long address lead',
+        property: {
+          normalizedPostcode: '1012AB',
+          normalizedCity: 'amsterdam',
+          canonicalAddress: address,
+          rawAddress: address,
+          masterProperty: null,
+        },
+        showcase: null,
+      }),
+      latestSuccessfulProjection: vi.fn().mockResolvedValue({ finishedAt: new Date() }),
+      servicesForProperty: vi.fn().mockResolvedValue(['Cleaning']),
+      upsertContent,
+    };
+    const service = new ShowcasesService(
+      repository as never,
+      { render: vi.fn().mockResolvedValue('<p>showcase</p>') } as never,
+      {} as never,
+    );
+
+    await service.generate('lead-1');
+
+    const content = upsertContent.mock.calls[0]?.[2] as {
+      readonly subject: string;
+      readonly propertySummary: string;
+    };
+    expect(content.subject).toHaveLength(160);
+    expect(content.subject.endsWith('...')).toBe(true);
+    expect(content.propertySummary).toContain(address);
+  });
+
   it('rejects manual edits when the lead is not qualified', async () => {
     const repository = {
       findLead: vi.fn().mockResolvedValue({

@@ -24,6 +24,11 @@ export interface GmailDraftResult {
   readonly draftId: string;
 }
 
+export interface GmailMessageImportResult {
+  readonly messageId: string;
+  readonly threadId: string;
+}
+
 export const GMAIL_PROVIDER = Symbol('GMAIL_PROVIDER');
 
 export class GmailProviderError extends Error {

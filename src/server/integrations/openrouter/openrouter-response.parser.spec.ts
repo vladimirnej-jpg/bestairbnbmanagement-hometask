@@ -224,6 +224,47 @@ describe('parseOpenRouterResponse', () => {
     }
   });
 
+  it('rejects a response truncated by the model token limit', () => {
+    expect(() =>
+      parseOpenRouterResponse(
+        {
+          choices: [
+            {
+              finish_reason: 'length',
+              message: {
+                content: '{"contactEmail":"owner@example.com","propertyAddress":{',
+              },
+            },
+          ],
+        },
+        'test-model',
+      ),
+    ).toThrowError(
+      expect.objectContaining({
+        code: 'PROVIDER_INVALID_RESPONSE',
+        message: 'OpenRouter response was truncated by the token limit',
+      }),
+    );
+  });
+
+  it('rejects a balanced address-only fragment as an extraction', () => {
+    expect(() =>
+      parseOpenRouterResponse(
+        {
+          choices: [
+            {
+              message: {
+                content:
+                  '{"propertyAddress":{"country":"Netherlands","city":"Amsterdam","street":"Example Street","houseNumber":"10","unit":null,"postcode":"1012 AB"}}',
+              },
+            },
+          ],
+        },
+        'test-model',
+      ),
+    ).toThrowError(expect.objectContaining({ code: 'PROVIDER_INVALID_RESPONSE' }));
+  });
+
   it('surfaces an error envelope as an unavailable provider', () => {
     expect(() =>
       parseOpenRouterResponse(

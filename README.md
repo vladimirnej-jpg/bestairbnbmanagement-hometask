@@ -8,35 +8,6 @@ lead against Google Sheets master data, blocks leads outside the service area,
 and lets an operations representative review and send a customer-ready
 showcase. A separate monitoring view provides read-only operational oversight.
 
-## Deliverables covered
-
-- Gmail lead ingestion and conversation consolidation.
-- Property extraction, property matching, geocoding, and zone qualification.
-- A reviewed showcase proposal saved as a Gmail draft.
-- Operations view for the lead lifecycle and showcase editing.
-- Read-only monitoring view for provider status, calendar, lead counts, and
-  processing failures.
-- Fake providers, seeded demo users, unit tests, integration tests, and a
-  Playwright critical-flow scenario for a repeatable demo.
-
-## Product flow
-
-```text
-Gmail message
-  -> Gmail sync
-  -> lead and conversation persisted
-  -> Inngest processing workflow
-  -> extract contact and address
-  -> enrich, match property, and evaluate service zone
-  -> qualified lead
-  -> operator reviews and edits showcase
-  -> Gmail draft ready to send
-```
-
-Leads outside a configured service zone are moved to `GONE_COLD`. Incomplete
-or ambiguous leads remain blocked from showcase generation until an operator
-resolves the missing information or property match.
-
 ## Architecture
 
 ```text
@@ -88,6 +59,16 @@ Google Sheets change: lead lifecycle, audit events, processing attempts,
 property-match reviews, showcase edits, and Gmail draft IDs. Prisma gives
 typed migrations and a concise repository implementation.
 
+PostgreSQL was chosen specifically because the operational model is strongly
+relational: leads have messages, properties, processing runs, lifecycle
+events, match candidates, showcases, and service-zone relationships. Foreign
+keys, unique constraints, indexes, and transactions keep these related
+records consistent while supporting filtered operational views and reporting.
+PostgreSQL is also mature, widely available as a managed or self-hosted
+service, and has first-class Prisma support. A document database would make
+the cross-entity queries and consistency guarantees more difficult without
+providing a meaningful benefit for this workload.
+
 Google Sheets remains the editable source of truth for properties, zones, and
 services. PostgreSQL holds a validated projection so lead processing does not
 depend on a live Sheet request and historical workflow state stays durable.
@@ -124,6 +105,7 @@ safer.
 ## Local setup
 
 ```bash
+cd bestairbnb-take-home
 pnpm install
 cp .env.example .env
 
@@ -157,19 +139,60 @@ For a clean local demo database, use the destructive
 `pnpm reset:demo -- --yes` command instead. It removes existing local demo
 data before recreating the demo users.
 
+## Import a test email into the QA Gmail mailbox
+
+For a live end-to-end check, the CLI can import an RFC822 message into the
+configured non-production Gmail mailbox and then queue the same Gmail sync
+workflow used by the application. The message is not sent to an external
+recipient, but it does become real data in that QA mailbox.
+
+Before using this command:
+
+- set `PROVIDER_MODE=live` in `.env`;
+- set `GOOGLE_GMAIL_USER_ID` to the QA mailbox address, or `me` when the OAuth
+  token belongs to that QA mailbox;
+- grant the OAuth token the `gmail.insert` or `gmail.modify` scope;
+- keep `GOOGLE_GMAIL_QUERY` broad enough to find the imported message;
+- run `pnpm dev` and `pnpm inngest:dev` in separate terminals.
+
+Import one of the checked-in scenarios:
+
+```bash
+pnpm gmail:inject -- \
+  --file scenarios/qualified-inside.eml \
+  --confirm-mailbox qa-mailbox@example.com
+```
+
+The command waits for Gmail ingestion and the three processing steps. Use
+`--fire-and-forget` to return after importing and queueing the sync, or
+`--dry-run` to validate an RFC822 file without calling Google or Inngest.
+On every run the CLI keeps the selected scenario's subject and body, but
+replaces its `Date` header with the current time, generates a unique test
+sender address, and adds a unique subject/`Message-ID` suffix so Gmail starts a
+separate conversation. The checked-in scenarios cover:
+
+- `qualified-inside.eml` - complete Amsterdam request;
+- `qualified-amsterdam-apartment.eml` - recurring apartment and linen service;
+- `qualified-amsterdam-dutch.eml` - complete request written in Dutch;
+- `multipart-qualified.eml` - multipart/alternative MIME message;
+- `needs-info.eml` - no property address;
+- `needs-info-incomplete-address.eml` - address without house number/postcode;
+- `out-of-zone.eml` and `out-of-zone-utrecht.eml` - supported-service-area misses;
+- `ambiguous-multiple-properties.eml` - two property addresses in one request.
+
 ## Runtime configuration
 
 Copy `.env.example` to `.env` and configure only non-production credentials.
 
-| Integration     | Required configuration                                |
-| --------------- | ----------------------------------------------------- |
-| PostgreSQL      | `DATABASE_URL`, `DIRECT_URL`                          |
-| Authentication  | `JWT_SECRET`, OPS and MONITOR user credentials        |
-| Gmail           | OAuth client ID, secret, refresh token, mailbox query |
-| Google Sheets   | Spreadsheet ID and base64 service-account JSON        |
-| Google Calendar | Calendar ID and Gmail OAuth credentials               |
-| LLM extraction  | `OPENROUTER_API_KEY`, model, optional fallbacks       |
-| Geocoding       | `NOMINATIM_BASE_URL`                                  |
+| Integration     | Required configuration                                         |
+| --------------- | -------------------------------------------------------------- |
+| PostgreSQL      | `DATABASE_URL`, `DIRECT_URL`                                   |
+| Authentication  | `JWT_SECRET`, OPS and MONITOR user credentials                 |
+| Gmail           | OAuth client ID, secret, refresh token, mailbox query          |
+| Google Sheets   | Spreadsheet ID and base64 service-account JSON                 |
+| Google Calendar | Calendar ID and Gmail OAuth credentials                        |
+| LLM extraction  | `LEAD_INTELLIGENCE_PROVIDER` plus OpenRouter or Groq key/model |
+| Geocoding       | `NOMINATIM_BASE_URL`                                           |
 
 The default `PROVIDER_MODE=fake` is intended for local automated testing.
 Use `PROVIDER_MODE=live` only with a dedicated demo account.
@@ -191,7 +214,16 @@ pnpm test:e2e
 | Unit        | Qualification policy, address/property matching, master-data validation, Gmail draft idempotency, auth, runtime config, and Inngest dispatching                               |
 | Integration | Route contracts and service flows against a configured test PostgreSQL database (`TEST_DATABASE_URL`)                                                                         |
 | E2E         | An OPS user syncs master data and Gmail, turns an incomplete conversation into a qualified lead, creates a showcase draft, updates lifecycle, then verifies monitoring access |
-| Live smoke  | `pnpm smoke:live` checks configured Google, geocoding, and LLM connections; Gmail draft creation is opt-in                                                                    |
+| Live smoke  | `pnpm smoke:live` checks configured Google, geocoding, and LLM connections; `pnpm gmail:inject` imports a selected RFC822 case into the QA mailbox and runs Gmail sync        |
+
+The lead-extraction evaluation is part of `pnpm test` and uses committed,
+recorded provider responses only, so CI makes no paid model calls. It gates
+zero false `OUT_OF_ZONE` decisions for protected cases and at least 90% exact
+matches across `postcode`, `street`, `houseNumber`, and `contactEmail`.
+Refresh snapshots only deliberately with `pnpm eval:lead-extraction:record`
+while `PROVIDER_MODE=live`; the command refuses every other mode and production.
+When T7 introduces its confidence threshold, calibrate that threshold against
+this fixture set before using it to automate a qualification decision.
 
 Google setup details are in [docs/google-setup.md](docs/google-setup.md).
 
@@ -217,7 +249,7 @@ rates with the selected provider's current pricing before production.
 
 ### LLM cost (calculated separately)
 
-The application uses the configured OpenRouter model for structured extraction.
+The application uses the configured OpenRouter or Groq model for structured extraction.
 The following example uses USD 0.10 per million input tokens and USD 0.40 per
 million output tokens only to make the calculation explicit:
 
@@ -260,3 +292,7 @@ retention, and LLM model choice. Costs can be controlled with message-length
 limits, one extraction per changed conversation, retries only for transient
 errors, caching stable geocoding results, and retention policies for raw email
 bodies and processing logs.
+
+### Actual time spent
+
+16 hours
