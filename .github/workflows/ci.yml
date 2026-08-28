@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: bestairbnb_test
+          POSTGRES_USER: bestairbnb
+          POSTGRES_PASSWORD: bestairbnb
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U bestairbnb -d bestairbnb_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      NODE_ENV: test
+      PROVIDER_MODE: fake
+      DATABASE_URL: postgresql://bestairbnb:bestairbnb@127.0.0.1:5432/bestairbnb_test?schema=public
+      DIRECT_URL: postgresql://bestairbnb:bestairbnb@127.0.0.1:5432/bestairbnb_test?schema=public
+      TEST_DATABASE_URL: postgresql://bestairbnb:bestairbnb@127.0.0.1:5432/bestairbnb_test?schema=public
+      JWT_SECRET: ci-secret-that-is-long-enough-for-test-environments
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.34.4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.14.0
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm db:migrate:deploy
+      - run: pnpm db:seed
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm test:integration
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm test:e2e
+      - run: pnpm build
+      - run: pnpm format:check
+      - run: git diff --check

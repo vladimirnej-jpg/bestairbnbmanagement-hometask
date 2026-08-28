@@ -130,6 +130,7 @@ cp .env.example .env
 # Use the included PostgreSQL container (or start PostgreSQL 16 yourself).
 docker compose up -d --wait postgres
 pnpm db:migrate
+pnpm db:seed
 ```
 
 The default `PROVIDER_MODE=fake` works without Google or LLM credentials. Keep
@@ -146,9 +147,15 @@ pnpm inngest:dev
 
 Open <http://localhost:3000/login>.
 
-Demo users are configured through the environment. The default local users
-are `ops@example.com` and `monitor@example.com`, both with password
-`ops-demo-password` / `monitor-demo-password` respectively.
+`pnpm db:seed` creates or updates the demo users. By default they are
+`ops@example.com` / `ops-demo-password` and
+`monitor@example.com` / `monitor-demo-password`. Set the matching `OPS_*` or
+`MONITOR_*` environment variables before seeding only when you need to
+override those local defaults.
+
+For a clean local demo database, use the destructive
+`pnpm reset:demo -- --yes` command instead. It removes existing local demo
+data before recreating the demo users.
 
 ## Runtime configuration
 
@@ -186,8 +193,7 @@ pnpm test:e2e
 | E2E         | An OPS user syncs master data and Gmail, turns an incomplete conversation into a qualified lead, creates a showcase draft, updates lifecycle, then verifies monitoring access |
 | Live smoke  | `pnpm smoke:live` checks configured Google, geocoding, and LLM connections; Gmail draft creation is opt-in                                                                    |
 
-The manual demo script is in [docs/demo-script.md](docs/demo-script.md). Google
-setup details are in [docs/google-setup.md](docs/google-setup.md).
+Google setup details are in [docs/google-setup.md](docs/google-setup.md).
 
 ## Security and operational safeguards
 

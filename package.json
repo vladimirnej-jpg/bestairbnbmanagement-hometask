@@ -25,6 +25,9 @@
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },
+  "prisma": {
+    "seed": "node --import tsx prisma/seed.ts"
+  },
   "dependencies": {
     "@next/env": "16.3.3",
     "@prisma/client": "6.6.0",

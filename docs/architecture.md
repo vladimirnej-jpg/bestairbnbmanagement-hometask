@@ -56,6 +56,6 @@ actions remain immediate API operations.
 
 Deploy the Next.js app from the repository root to Vercel. Use Neon PostgreSQL in
 production and local PostgreSQL plus fake providers for development and E2E.
-Apply Prisma migrations in CI through `DIRECT_URL` before deployment. Inngest
-discovers the deployed `/api/inngest` endpoint after the Vercel deployment.
-Langfuse is deferred.
+Apply Prisma migrations as part of the production deployment procedure using
+`DIRECT_URL`. Inngest discovers the deployed `/api/inngest` endpoint after the
+Vercel deployment.

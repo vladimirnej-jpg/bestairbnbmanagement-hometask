@@ -14,12 +14,16 @@ test('operator completes the deterministic lead journey and monitor verifies it'
   await expect(page.getByText(/Master-data sync queued/)).toBeVisible({ timeout: 30_000 });
   await expect(page.getByText('Master-data sync completed.')).toBeVisible({ timeout: 60_000 });
   await page.getByRole('button', { name: 'Sync Gmail' }).click();
-  await expect(page.getByText(/Gmail sync queued/)).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByRole('status').filter({ hasText: /Gmail sync queued/ })).toBeVisible({
+    timeout: 30_000,
+  });
   const leadRow = page.getByRole('row').filter({ hasText: 'Alex Example' }).first();
   await expect(leadRow).toBeVisible({ timeout: 60_000 });
   await expect(leadRow.getByText('Needs Info')).toBeVisible();
   await page.getByRole('button', { name: 'Sync Gmail' }).click();
-  await expect(page.getByText(/Gmail sync queued/)).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByRole('status').filter({ hasText: /Gmail sync queued/ })).toBeVisible({
+    timeout: 30_000,
+  });
   await expect(leadRow.getByText('Qualified')).toBeVisible({ timeout: 60_000 });
   await leadRow.getByRole('link', { name: /Review/ }).click();
   await expect(page).toHaveURL(/\/ops\/leads\//);
